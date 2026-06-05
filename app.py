@@ -94,8 +94,8 @@ if st.session_state.page == "login":
     st.markdown("<h1 style='text-align:center;'>🔐 Login</h1>", unsafe_allow_html=True)
 
     # FIX 1: show both roles clearly so tester knows credentials
-    st.info("**Admin login:** username `admin` | password `1234`\n\n"
-            "**Student login:** username `student` | password `pass`")
+   # st.info("**Admin login:** username `admin` | password `1234`\n\n"
+     #       "**Student login:** username `student` | password `pass`")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -398,7 +398,7 @@ if st.session_state.page == "teacher":
 
 
     default_teachers = [
-        {"name": "Neeraj Poddar",   "photo": "1.neeraj poddar.jpeg",    "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
+        {"name": "Neeraj Poddar",   "photo": "1.Neeraj poddar.jpeg",     "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
         {"name": "Nitish Kumar",    "photo": "2.Nitish kr sir.jpeg",      "department": "HOD",                    "subject": "English",        "experience": "8 Years",  "email": "nitish@cimage.in"},
         {"name": "Amit Shukla",     "photo": "3.Amit shukla sir.jpeg",    "department": "HOD",                    "subject": "DBMS",           "experience": "9 Years",  "email": "amit@cimage.in"},
         {"name": "Raju Sir",        "photo": "4.Raju sir.jpeg",           "department": "Information Technology", "subject": "JAVA",           "experience": "9 Years",  "email": "raju@cimage.in"},
