@@ -3,19 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import os
-import pyodbc #DATABASE CONNECTION KELIYE
-
-#DATABASE CONNECTION (MSSQL SERVER)
-
-def get_connection():
-    return pyodbc.connect(
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=ARUHI;"
-        "DATABASE=CimageDB;"
-        "Trusted_Connection=yes;"
-    )
-
 
 st.set_page_config(page_title="CIMAGE Dashboard", page_icon="🎓", layout="wide")
 
@@ -47,46 +34,42 @@ div.stButton > button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ── session state 
-if "page"          not in st.session_state: st.session_state.page          = "landing"
-if "logged_in"     not in st.session_state: st.session_state.logged_in     = False
-if "role"          not in st.session_state: st.session_state.role          = None
-if "username"      not in st.session_state: st.session_state.username      = ""
-if "notifications" not in st.session_state: st.session_state.notifications = []
+# session state variables
+if "page" not in st.session_state:
+    st.session_state.page = "landing"
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "role" not in st.session_state:
+    st.session_state.role = None
+if "username" not in st.session_state:
+    st.session_state.username = ""
+if "notifications" not in st.session_state:
+    st.session_state.notifications = []
 
-# login page 
-
-def check_login(username, password):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT full_name, role FROM users WHERE username=? AND password=?",
-            (username, password)
-        )
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return {"display": row[0], "role": row[1]}
-        return None
-    except Exception as e:
-        st.error(f"DB Error: {e}")
-        return None
+# users list (in real project this should come from database)
+USERS = {
+    "admin":   {"password": "1234", "role": "admin" },
+    "student": {"password": "pass", "role": "student"},
+}
 
 
-# LANDING PAGE
+# ---- LANDING PAGE ----
 
 if st.session_state.page == "landing":
     st.markdown("""
     <style>
     .stApp {
         background-image: url("https://images.unsplash.com/photo-1523050854058-8df90110c9f1");
-        background-size: cover; background-position: center;
+        background-size: cover;
+        background-position: center;
     }
     .main-title {
-        text-align: center; margin-top: 150px; color: white;
+        text-align: center;
+        margin-top: 150px;
+        color: white;
         background-color: rgba(0,0,0,0.6);
-        padding: 30px 40px; border-radius: 20px;
+        padding: 30px 40px;
+        border-radius: 20px;
         border: 1px solid rgba(255,255,255,0.15);
     }
     </style>
@@ -105,41 +88,39 @@ if st.session_state.page == "landing":
         if st.button("Get Started"):
             st.session_state.page = "login"
             st.rerun()
+
     st.stop()
 
 
+# ---- LOGIN PAGE ----
 
-# 1. LOGIN PAGE
-# ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "login":
-    st.markdown("<style>.block-container{max-width:420px;margin-top:80px;}</style>",
+    st.markdown("<style>.block-container { max-width: 420px; margin-top: 80px; }</style>",
                 unsafe_allow_html=True)
 
     st.markdown("<h1 style='text-align:center;'>🔐 Login</h1>", unsafe_allow_html=True)
+    st.caption("Use  admin / 1234  or  student / pass")
 
-   #login
-   
-    role_select = st.selectbox("Login As", ["Admin", "Student"])
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     col1, col2 = st.columns(2)
+
     with col1:
         if st.button("LOGIN", use_container_width=True):
-            user =check_login(username, password)
-            if user:
+            user = USERS.get(username)
+            if user and user["password"] == password:
                 st.session_state.logged_in = True
-                st.session_state.username  = username
-                st.session_state.role      = user["role"]
-                st.session_state.page      = "dashboard"
+                st.session_state.username = username
+                st.session_state.role = user["role"]
+                st.session_state.page = "dashboard"
                 st.session_state.notifications.append(
-                    f"✅ {user['display']} logged in at {datetime.now().strftime('%H:%M')}"
+                    f"Login at {datetime.now().strftime('%H:%M')}"
                 )
-                # FIX 1: use user['display'] — key now exists
                 st.success(f"Welcome {user['display']}!")
                 st.rerun()
             else:
-                st.error("❌ Wrong username or password")
+                st.error("Wrong username or password")
 
     with col2:
         if st.button("Forgot pass?", use_container_width=True):
@@ -148,11 +129,11 @@ if st.session_state.page == "login":
     st.stop()
 
 
-
-# 2. SIDEBAR
+# ---- SIDEBAR ----
 
 if st.session_state.page not in ["landing", "login"]:
     with st.sidebar:
+
         st.markdown("""
         <div style='text-align:center; padding:10px 0;'>
             <div style='font-size:36px;'></div>
@@ -186,6 +167,7 @@ if st.session_state.page not in ["landing", "login"]:
         st.session_state.page = page_map[choice]
 
         st.divider()
+
         n = len(st.session_state.notifications)
         if n > 0:
             st.markdown(f"🔔 **{n} notification(s)**")
@@ -196,97 +178,119 @@ if st.session_state.page not in ["landing", "login"]:
             st.rerun()
 
 
-# 3. LOAD DATA
+# ---- LOAD DATA ----
 
-@st.cache_data(ttl=60)
+@st.cache_data
 def load_data():
     try:
-        conn = get_connection()
-        data = pd.read_sql("SELECT * FROM students", conn)
-        conn.close()
-    except Exception as e:
-        st.error(f"DB Error: {e}")
-        data = pd.DataFrame(columns=["name","department","marks","attendance"])
+        data = pd.read_csv("student_data_150.csv")
+    except FileNotFoundError:
+        import numpy as np
+        np.random.seed(42)
+        n = 150
+        names = ["Rahul", "Ankit", "Priya", "Sneha", "Ravi", "Amit",
+                 "Pooja", "Raj", "Neha", "Vikram", "Sita", "Geeta"]
+        depts = ["BCA", "BBA", "BCom", "BScIT"]
+        data = pd.DataFrame({
+            "name": [names[i % len(names)] + str(i) for i in range(n)],
+            "department": [depts[i % len(depts)] for i in range(n)],
+            "marks": np.random.randint(20, 100, n),
+        })
     data.columns = data.columns.str.strip().str.lower()
     return data
 
 df = load_data()
 
-df["rank"]   = df["marks"].rank(ascending=False, method="dense").astype(int)
+att_cycle = [88, 75, 92, 81, 67, 95, 70, 83, 60, 98]
+df["attendance"] = [att_cycle[i % len(att_cycle)] for i in range(len(df))]
+df["rank"] = df["marks"].rank(ascending=False, method="dense").astype(int)
 df["result"] = df["marks"].apply(lambda x: "Pass" if x >= 40 else "Fail")
-df["grade"]  = df["marks"].apply(
-    lambda x: "A+" if x >= 90 else "A"  if x >= 80 else "B" if x >= 70 else
-              "C"  if x >= 60 else "D"  if x >= 50 else "E" if x >= 40 else "F"
+df["grade"] = df["marks"].apply(
+    lambda x: "A+" if x >= 90 else
+              "A"  if x >= 80 else
+              "B"  if x >= 70 else
+              "C"  if x >= 60 else
+              "D"  if x >= 50 else
+              "E"  if x >= 40 else "F"
 )
 
 student_images = {
     "Rahul": "https://cdn-icons-png.flaticon.com/512/2202/2202112.png",
     "Ankit": "https://cdn-icons-png.flaticon.com/512/4140/4140048.png",
     "Priya": "https://cdn-icons-png.flaticon.com/512/4140/4140051.png",
-    "Sneha": "https://cdn-icons-png.flaticon.com/512/6997/6997662.png",
+    "Sneha": "https://cdn-icons-png.flaticon.com/512/6997/6997662.png"
 }
 
 
+# ---- DASHBOARD ----
 
-# 4.  DASHBOARD suru
-# ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "dashboard":
+
     st.title("Student Performance Dashboard")
     st.caption("Academic Insight Platform")
     st.divider()
 
-    dept        = st.sidebar.selectbox("Department", ["All"] + sorted(df["department"].unique().tolist()))
-    search      = st.sidebar.text_input("Search Student")
+    dept = st.sidebar.selectbox("Department", ["All"] + sorted(df["department"].unique().tolist()))
+    search = st.sidebar.text_input("Search Student")
     min_m, max_m = int(df["marks"].min()), int(df["marks"].max())
     marks_range = st.sidebar.slider("Marks Range", min_m, max_m, (min_m, max_m))
 
     fdf = df.copy()
-    if dept   != "All": fdf = fdf[fdf["department"].eq(dept)]
-    if search:          fdf = fdf[fdf["name"].str.contains(search, case=False)]
+    if dept != "All":
+        fdf = fdf[fdf["department"] == dept]
+    if search:
+        fdf = fdf[fdf["name"].str.contains(search, case=False)]
     fdf = fdf[(fdf["marks"] >= marks_range[0]) & (fdf["marks"] <= marks_range[1])]
 
-    c1,c2,c3,c4,c5 = st.columns(5)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Total Students", len(fdf))
-    c2.metric("Avg Marks",  round(fdf["marks"].mean(),1) if len(fdf) else 0)
-    c3.metric("Highest",    fdf["marks"].max() if len(fdf) else 0)
-    c4.metric("Lowest",     fdf["marks"].min() if len(fdf) else 0)
-    pass_rate = round((fdf["result"].eq("Pass").sum()/len(fdf))*100,1) if len(fdf) else 0
-    c5.metric("Pass Rate",  f"{pass_rate}%")
+    c2.metric("Avg Marks", round(fdf["marks"].mean(), 1) if len(fdf) else 0)
+    c3.metric("Highest", fdf["marks"].max() if len(fdf) else 0)
+    c4.metric("Lowest",  fdf["marks"].min() if len(fdf) else 0)
+    pass_rate = round(
+        (fdf["result"].str.contains("Pass").sum() / len(fdf)) * 100, 1
+    ) if len(fdf) else 0
+    c5.metric("Pass Rate", f"{pass_rate}%")
 
     st.divider()
+
     col1, col2 = st.columns(2)
+
     with col1:
         st.subheader("Department Performance")
         dept_avg = fdf.groupby("department")["marks"].mean().reset_index()
         fig1 = px.bar(dept_avg, x="department", y="marks", color="department",
                       color_discrete_sequence=px.colors.qualitative.Bold,
-                      labels={"marks":"Avg Marks"})
+                      labels={"marks": "Avg Marks"})
         fig1.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
         st.subheader("Grade Distribution")
         grade_data = fdf["grade"].value_counts().reset_index()
-        grade_data.columns = ["grade","count"]
+        grade_data.columns = ["grade", "count"]
         fig_pie = px.pie(grade_data, names="grade", values="count",
-                         color_discrete_sequence=px.colors.qualitative.Pastel, hole=0.4)
+                         color_discrete_sequence=px.colors.qualitative.Pastel,
+                         hole=0.4)
         fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.subheader("Pass vs Fail by Department")
     pf = fdf.copy()
     pf["status"] = pf["marks"].apply(lambda x: "Pass" if x >= 40 else "Fail")
-    pf_group = pf.groupby(["department","status"]).size().reset_index(name="count")
-    fig_pf = px.bar(pf_group, x="department", y="count", color="status", barmode="group",
-                    color_discrete_map={"Pass":"#00c853","Fail":"#ff1744"})
+    pf_group = pf.groupby(["department", "status"]).size().reset_index(name="count")
+    fig_pf = px.bar(pf_group, x="department", y="count", color="status",
+                    barmode="group",
+                    color_discrete_map={"Pass": "#00c853", "Fail": "#ff1744"})
     fig_pf.update_layout(plot_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig_pf, use_container_width=True)
 
     st.subheader("Topper Student")
     if len(fdf) > 0:
         topper = fdf.sort_values("marks", ascending=False).iloc[0]
-        t1, t2 = st.columns([1,2])
-        with t1: st.image("https://cdn-icons-png.flaticon.com/512/2583/2583434.png", width=160)
+        t1, t2 = st.columns([1, 2])
+        with t1:
+            st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=160)
         with t2:
             st.markdown(f"""
             ## {topper['name']}
@@ -296,6 +300,7 @@ if st.session_state.page == "dashboard":
             """)
 
     st.divider()
+
     st.subheader("Marks Distribution")
     fig2 = px.histogram(fdf, x="marks", nbins=10, color_discrete_sequence=["#00BFFF"])
     fig2.update_layout(plot_bgcolor="rgba(0,0,0,0)")
@@ -305,25 +310,28 @@ if st.session_state.page == "dashboard":
     st.dataframe(fdf, use_container_width=True)
 
 
-
-# 5. ANALYSIS (student comparison  )
+# ---- ANALYSIS ----
 
 if st.session_state.page == "analysis":
+
     st.title("Detailed Analysis")
-    tab1, tab2, tab3 = st.tabs(["Rankings","Trends","Compare Departments"])
+
+    tab1, tab2, tab3 = st.tabs(["Rankings", "Trends", "Compare Departments"])
 
     with tab1:
         c1, c2 = st.columns(2)
         with c1:
             st.subheader("Top 10 Students")
-            st.dataframe(df.sort_values("marks", ascending=False).head(10)
-                           [["name","department","marks","grade","rank"]],
-                         use_container_width=True)
+            top10 = df.sort_values("marks", ascending=False).head(10)[
+                ["name", "department", "marks", "grade", "rank"]
+            ]
+            st.dataframe(top10, use_container_width=True)
         with c2:
             st.subheader("Bottom 10 Students")
-            st.dataframe(df.sort_values("marks").head(10)
-                           [["name","department","marks","grade","rank"]],
-                         use_container_width=True)
+            bot10 = df.sort_values("marks").head(10)[
+                ["name", "department", "marks", "grade", "rank"]
+            ]
+            st.dataframe(bot10, use_container_width=True)
 
     with tab2:
         st.subheader("Marks Spread per Department")
@@ -344,24 +352,31 @@ if st.session_state.page == "analysis":
         dept_list = df["department"].unique().tolist()
         d1 = st.selectbox("Department A", dept_list, index=0)
         d2 = st.selectbox("Department B", dept_list, index=min(1, len(dept_list)-1))
-        comp = df[df["department"].isin([d1,d2])]
+        comp = df[df["department"].isin([d1, d2])]
+
         fig_comp = px.histogram(comp, x="marks", color="department",
                                 barmode="overlay", nbins=10, opacity=0.7)
         fig_comp.update_layout(plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_comp, use_container_width=True)
-        stats = comp.groupby("department")["marks"].agg(["mean","median","std","min","max"]).round(2)
-        stats.columns = ["Mean","Median","Std Dev","Min","Max"]
+
+        stats = comp.groupby("department")["marks"].agg(
+            ["mean", "median", "std", "min", "max"]
+        ).round(2)
+        stats.columns = ["Mean", "Median", "Std Dev", "Min", "Max"]
         st.dataframe(stats, use_container_width=True)
 
 
+# ---- STUDENT PROFILE ----
 
-# 6. STUDENT PROFILE
 if st.session_state.page == "profile":
+
     st.title("Student Profile")
+
     name_input = st.text_input("Enter Student Name")
 
     if name_input:
         results = df[df["name"].str.contains(name_input, case=False)]
+
         if not results.empty:
             if len(results) > 1:
                 chosen_name = st.selectbox("Multiple found, pick one:", results["name"].tolist())
@@ -369,11 +384,15 @@ if st.session_state.page == "profile":
             else:
                 student = results.iloc[0]
 
-            c1, c2 = st.columns([1,2])
+            c1, c2 = st.columns([1, 2])
+
             with c1:
-                img = student_images.get(student["name"],
-                                         "https://cdn-icons-png.flaticon.com/512/3135/3135715.png")
+                img = student_images.get(
+                    student["name"],
+                    "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+                )
                 st.image(img, width=220)
+
             with c2:
                 st.markdown(f"""
                 ## {student['name']}
@@ -383,83 +402,81 @@ if st.session_state.page == "profile":
                 **Rank:** #{student['rank']}
                 **Result:** {student['result']}
                 """)
+
                 st.progress(int(student["attendance"]),
                             text=f"Attendance: {student['attendance']}%")
+
                 fig_gauge = go.Figure(go.Indicator(
-                    mode="gauge+number", value=int(student["marks"]),
-                    gauge={"axis":{"range":[0,100]},"bar":{"color":"#00BFFF"},
-                           "steps":[{"range":[0,40],"color":"#ff1744"},
-                                    {"range":[40,70],"color":"#ffd600"},
-                                    {"range":[70,100],"color":"#00c853"}]},
-                    title={"text":"Score out of 100"}
+                    mode="gauge+number",
+                    value=int(student["marks"]),
+                    gauge={
+                        "axis": {"range": [0, 100]},
+                        "bar": {"color": "#00BFFF"},
+                        "steps": [
+                            {"range": [0,  40], "color": "#ff1744"},
+                            {"range": [40, 70], "color": "#ffd600"},
+                            {"range": [70, 100], "color": "#00c853"},
+                        ]
+                    },
+                    title={"text": "Score out of 100"}
                 ))
-                fig_gauge.update_layout(height=220, margin=dict(t=30,b=0,l=0,r=0))
+                fig_gauge.update_layout(height=220, margin=dict(t=30, b=0, l=0, r=0))
                 st.plotly_chart(fig_gauge, use_container_width=True)
+
         else:
             st.error("Student not found")
 
 
-
-# 7. TEACHER PROFILE  (FACULTY INFO)
+# ---- TEACHER PROFILE ----
 
 if st.session_state.page == "teacher":
+
     st.title("Teacher Profiles")
 
     if st.session_state.role != "admin":
         st.warning("Admin access required.")
         st.stop()
 
-
     default_teachers = [
-        {"name": "Neeraj Poddar",   "photo": "1.neeraj poddar.jpeg",    "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
-        {"name": "Nitish Kumar",    "photo": "2.Nitish kr sir.jpeg",      "department": "HOD",                    "subject": "English",        "experience": "8 Years",  "email": "nitish@cimage.in"},
-        {"name": "Amit Shukla",     "photo": "3.Amit shukla sir.jpeg",    "department": "HOD",                    "subject": "DBMS",           "experience": "9 Years",  "email": "amit@cimage.in"},
-        {"name": "Raju Sir",        "photo": "4.Raju sir.jpeg",           "department": "Information Technology", "subject": "JAVA",           "experience": "9 Years",  "email": "raju@cimage.in"},
-        {"name": "Neeraj Kumar",    "photo": "5.Neeraj kumar sir.jpeg",   "department": "Information Technology", "subject": "Web Technology", "experience": "7 Years",  "email": "neerajk@cimage.in"},
-        {"name": "Murli Sir",       "photo": "6.Murli sir.jpeg",          "department": "Information Technology", "subject": "Python",         "experience": "6 Years",  "email": "murli@cimage.in"},
-        {"name": "Sanjeev Kumar",   "photo": "7.Sanjeev kumar sir.jpeg",  "department": "Management",             "subject": "Power BI",       "experience": "7 Years",  "email": "sanjeevkr@cimage.in"},
-        {"name": "Nilanjan Sir",    "photo": "8.Nilanjan sir.jpeg",       "department": "Management",             "subject": "Finance",        "experience": "5 Years",  "email": "nilanjan@cimage.in"},
-        {"name": "Pawan Sir",       "photo": "9.Pawan sir.jpeg",          "department": "BCA",                    "subject": "C Programming",  "experience": "8 Years",  "email": "pawan@cimage.in"},
-        {"name": "Ravi Soni",       "photo": "10.Ravi soni sir.jpeg",     "department": "BCA",                    "subject": "Networking",     "experience": "6 Years",  "email": "ravisoni@cimage.in"},
+        {"name": "neeraj poddar .jpeg",    "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
+        {"name": "Nitish kr sir.jpeg",     "department": "HOD",                    "subject": "English",        "experience": "8 Years",  "email": "nitish@cimage.in"},
+        {"name": "Amit Shukla Sir.jpeg",   "department": "HOD",                    "subject": "DBMS",           "experience": "9 Years",  "email": "amit@cimage.in"},
+        {"name": "Raju Sir.jpeg",          "department": "Information Technology", "subject": "JAVA",           "experience": "9 Years",  "email": "raju@cimage.in"},
+        {"name": "Neeraj Kumar Sir.jpeg",  "department": "Information Technology", "subject": "Web Technology", "experience": "7 Years",  "email": "neerajk@cimage.in"},
+        {"name": "Sanjeev kumar Sir.jpeg", "department": "Management",             "subject": "Power BI",       "experience": "7 Years",  "email": "sanjeevkr@cimage.in"},
+
     ]
 
     if "teachers" not in st.session_state:
         st.session_state.teachers = default_teachers
 
-    FALLBACK_ICON = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png"
-
+    icon = "https://cdn-icons-png.flaticon.com/512/4140/4140048.png"
     cols = st.columns(3)
+
     for i, t in enumerate(st.session_state.teachers):
         with cols[i % 3]:
-            # FIX 2b: try to load local photo; fall back to icon if file missing
-            photo_path = t.get("photo", "")
-            if photo_path and os.path.exists(photo_path):
-                st.image(photo_path, width=120)
-            else:
-                st.image(FALLBACK_ICON, width=100)
-
-            # FIX 2c: show real name, not filename
+            st.image(icon, width=100)
             st.markdown(f"""
-            **{t['name']}**  
-            🏢 Dept: {t['department']}  
-            📚 Subject: {t['subject']}  
-            🕐 Experience: {t['experience']}  
-            ✉️ {t['email']}
+            **{t['name']}**
+            Dept: {t['department']}
+            Subject: {t['subject']}
+            Experience: {t['experience']}
+            Email: {t['email']}
             """)
             st.divider()
 
-    with st.expander("➕ Add New Faculty"):
-        fn  = st.text_input("Full Name *",    key="fn")
-        fd  = st.selectbox("Department",      ["BCA","BBA","BCom","BScIT","IT","Management","HOD"], key="fd")
-        fs  = st.text_input("Subject *",      key="fs")
-        fe  = st.text_input("Experience",     key="fe")
-        fem = st.text_input("Email",          key="fem")
+    with st.expander("Add New Faculty"):
+        fn  = st.text_input("Name",       key="fn")
+        fd  = st.selectbox("Department",  ["BCA","BBA","BCom","IT","Management"], key="fd")
+        fs  = st.text_input("Subject",    key="fs")
+        fe  = st.text_input("Experience", key="fe")
+        fem = st.text_input("Email",      key="fem")
 
         if st.button("Add Faculty"):
             if fn and fs:
                 st.session_state.teachers.append({
-                    "name": fn, "photo": "", "department": fd,
-                    "subject": fs, "experience": fe, "email": fem
+                    "name": fn, "department": fd, "subject": fs,
+                    "experience": fe, "email": fem
                 })
                 st.session_state.notifications.append(f"Faculty '{fn}' added")
                 st.success(f"{fn} added!")
@@ -468,14 +485,16 @@ if st.session_state.page == "teacher":
                 st.error("Name and Subject are required.")
 
 
-# 8. ATTENDANCE (sab 85prct)
+# ---- ATTENDANCE ----
 
 if st.session_state.page == "attendance":
+
     st.title("Attendance Management")
-    att_df = df[["name","department","attendance"]].copy()
+
+    att_df = df[["name", "department", "attendance"]].copy()
 
     threshold = st.slider("Flag students below (%)", 50, 90, 75)
-    flagged   = att_df[att_df["attendance"] < threshold]
+    flagged = att_df[att_df["attendance"] < threshold]
 
     c1, c2 = st.columns(2)
     with c1:
@@ -488,10 +507,12 @@ if st.session_state.page == "attendance":
         else:
             st.success("All students are above threshold!")
 
-    fig_att = px.bar(att_df.groupby("department")["attendance"].mean().reset_index(),
-                     x="department", y="attendance", color="department",
-                     labels={"attendance":"Avg Attendance %"},
-                     color_discrete_sequence=px.colors.qualitative.Safe)
+    fig_att = px.bar(
+        att_df.groupby("department")["attendance"].mean().reset_index(),
+        x="department", y="attendance", color="department",
+        labels={"attendance": "Avg Attendance %"},
+        color_discrete_sequence=px.colors.qualitative.Safe
+    )
     fig_att.add_hline(y=threshold, line_dash="dash", line_color="red",
                       annotation_text=f"Threshold {threshold}%")
     fig_att.update_layout(plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
@@ -500,36 +521,18 @@ if st.session_state.page == "attendance":
     if st.session_state.role == "admin":
         with st.expander("Mark Today's Attendance"):
             sel_student = st.selectbox("Student", df["name"].unique())
-            status = st.radio("Status", ["Present","Absent"], horizontal=True)
+            status = st.radio("Status", ["Present", "Absent"], horizontal=True)
             if st.button("Save"):
-                try:
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "SELECT student_id FROM students WHERE name=?",
-                        (sel_student,)
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        student_id = row[0]
-                        cursor.execute(
-                            "INSERT INTO attendance (student_id, att_date, status, marked_by) VALUES (?,?,?,?)",
-                            (student_id, datetime.now().date(), status, st.session_state.username)
-                        )
-                        conn.commit()
-                        conn.close()
-                        st.session_state.notifications.append(f"{sel_student} marked {status}")
-                        st.success(f"✅ Saved in DB: {sel_student} — {status}")
-                    else:
-                        st.error("Student not found!")
-                except Exception as e:
-                    st.error(f"DB Error: {e}")
-             
+                st.session_state.notifications.append(
+                    f"{sel_student} marked {status}"
+                )
+                st.success(f"Saved: {sel_student} — {status}")
 
 
-# 9.ADD STUDENT
+# ---- ADD STUDENT ----
 
 if st.session_state.page == "add":
+
     st.title("Add New Student")
 
     if st.session_state.role != "admin":
@@ -538,97 +541,76 @@ if st.session_state.page == "add":
 
     with st.form("add_student"):
         name       = st.text_input("Student Name *")
-        department = st.selectbox("Department *", ["BCA","BBA","BCom","BScIT"])
+        department = st.selectbox("Department *", ["BCA", "BBA", "BCom", "BScIT"])
         marks      = st.number_input("Marks *", min_value=0, max_value=100, step=1)
-        attendance = st.number_input("Attendance % *", min_value=0, max_value=100, step=1, value=80)
-        done       = st.form_submit_button("Add Student")
-     
+        attendance = st.number_input("Attendance % *", min_value=0, max_value=100,
+                                     step=1, value=80)
+        done = st.form_submit_button("Add Student")
+
     if done:
-     if name.strip():
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO students (name,department,marks,attendance) VALUES (?,?,?,?)",
-                (name.strip(), department, int(marks), int(attendance))
-            )
-            conn.commit()
-            conn.close()
+        if name.strip():
+            new_row = pd.DataFrame([[name.strip(), department, marks, attendance]],
+                                   columns=["name", "department", "marks", "attendance"])
+            updated = pd.concat([df, new_row], ignore_index=True)
+            updated.to_csv("student_data_150.csv", index=False)
             load_data.clear()
             st.session_state.notifications.append(f"Student '{name}' added")
             st.success(f"{name} added successfully!")
             st.balloons()
-        except Exception as e:
-            st.error(f"DB Error: {e}")
-    else:
-        st.error("Please enter student name.")    
-        
-        # FOR DELETION OF STUDENT
-        
-        # DELETE STUDENT
-st.divider()
-st.subheader("🗑️ Delete Student")
-del_name = st.selectbox("Select Student to Delete", df["name"].tolist())
+        else:
+            st.error("Please enter student name.")
 
-if st.button("Delete Student", type="primary"):
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM students WHERE name=?",
-            (del_name,)
-        )
-        conn.commit()
-        conn.close()
-        load_data.clear()
-        st.session_state.notifications.append(f"Student '{del_name}' deleted")
-        st.success(f"✅ {del_name} deleted successfully!")
-        st.rerun()
-    except Exception as e:
-        st.error(f"DB Error: {e}")
-                    
-     
 
-# 10. REPORTS
+# ---- REPORTS ----
 
 if st.session_state.page == "reports":
+
     st.title("Report Generation")
 
     if st.session_state.role != "admin":
         st.warning("Admin access required.")
         st.stop()
 
-    dept_f   = st.selectbox("Department",    ["All"] + df["department"].unique().tolist())
-    result_f = st.selectbox("Result Filter", ["All","Pass","Fail"])
+    dept_f   = st.selectbox("Department",   ["All"] + df["department"].unique().tolist())
+    result_f = st.selectbox("Result Filter", ["All", "Pass", "Fail"])
 
     report = df.copy()
-    if dept_f   != "All": report = report[report["department"].eq(dept_f)]
-    if result_f != "All": report = report[report["result"].eq(result_f)]
+    if dept_f != "All":
+        report = report[report["department"] == dept_f]
+    if result_f != "All":
+        report = report[report["result"] == result_f]
 
     st.markdown(f"**{len(report)} records found**")
     st.dataframe(report, use_container_width=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        st.download_button("Download CSV",
-                           data=report.to_csv(index=False).encode("utf-8"),
-                           file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                           mime="text/csv", use_container_width=True)
+        csv_data = report.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download CSV",
+            data=csv_data,
+            file_name=f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
     with c2:
         summary = report.groupby("department")["marks"].describe().round(2)
-        st.download_button("Download Summary",
-                           data=summary.to_csv().encode("utf-8"),
-                           file_name="dept_summary.csv",
-                           mime="text/csv", use_container_width=True)
+        st.download_button(
+            "Download Summary",
+            data=summary.to_csv().encode("utf-8"),
+            file_name="dept_summary.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
     st.subheader("Department Summary")
     st.dataframe(summary, use_container_width=True)
 
 
-
-# 11. NOTIFICATIONS
+# ---- NOTIFICATIONS ----
 
 if st.session_state.page == "notifications":
+
     st.title("Notifications")
 
     if not st.session_state.notifications:
@@ -642,11 +624,10 @@ if st.session_state.page == "notifications":
         st.rerun()
 
 
-
-# 12. SETTINGS
-
+# ---- SETTINGS ----
 
 if st.session_state.page == "settings":
+
     st.title("Settings")
 
     st.subheader("Account Info")
@@ -661,23 +642,15 @@ if st.session_state.page == "settings":
         save   = st.form_submit_button("Update")
 
     if save:
-        if new_p == conf_p and len(new_p) >= 4:
-           try:
-             conn = get_connection()
-             cursor = conn.cursor()
-             cursor.execute(
-                 "UPDATE users SET password=? WHERE username=?",
-                 (new_p, st.session_state.username)
-             )
-             conn.commit()
-             conn.close()
-             st.success("Password updated!")
-           except Exception as e:
-            st.error(f"DB Error: {e}")
-    else:
-        st.error("Passwords don't match or too short.")
-                
-               
+        user = USERS.get(st.session_state.username)
+        if user and user["password"] == old_p:
+            if new_p == conf_p and len(new_p) >= 4:
+                USERS[st.session_state.username]["password"] = new_p
+                st.success("Password updated!")
+            else:
+                st.error("Passwords don't match or too short.")
+        else:
+            st.error("Current password is wrong.")
 
     st.subheader("Data")
     if st.button("Reload Data"):
@@ -685,37 +658,47 @@ if st.session_state.page == "settings":
         st.success("Data reloaded.")
 
 
-# 13. ABOUT my project
+# ---- ABOUT ----
 
 if st.session_state.page == "about":
+
     st.title("About This Project")
-    c1, c2 = st.columns([2,1])
+
+    c1, c2 = st.columns([2, 1])
+
     with c1:
         st.markdown("""
         ### CIMAGE Student Performance Dashboard
 
-        Built to help teachers and admin staff track student performance,
-        attendance, and grades in one place.
+        This project is built to help teachers and admin staff track
+        student performance, attendance, and grades in one place.
 
-        **Technologies Used:** Python · Streamlit · Pandas · Plotly
+        **Technologies Used:**
+        - Python
+        - Streamlit
+        - Pandas
+        - Plotly
 
-        **Features:**
-        - Admin & Student login (role-based access)
-        - Live KPI dashboard
-        - Grade & pass/fail charts
-        - Student profile with score gauge
-        - Teacher profiles with local photos
-        - Attendance tracker & flagging
+        **What you can do:**
+        - Login as admin or student
+        - View dashboard with live KPIs
+        - Check grade and pass/fail charts
+        - Search and view student profiles
+        - Manage teacher list
+        - Track attendance and flag low attenders
         - Add new students
-        - Downloadable CSV reports
-        - Notifications log
+        - Download reports as CSV
+        - Get notifications for actions
+
+        **Purpose:**
+        This dashboard helps teachers identify weak students early
+        and take action before exams.
         """)
+
     with c2:
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=180)
         st.markdown("""
-        **Version:** 2.1  
-        **College:** CIMAGE, Patna  
+        **Version:** 2.0
+        **College:** CIMAGE, Patna
         **Contact:** admin@cimage.in
         """)
-        
-        # this is not the end -------- aage ka in phase 3 !!!!!!!
