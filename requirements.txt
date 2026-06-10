@@ -1,6 +1,5 @@
-pyodbc
 streamlit
 pandas
 plotly
-
+pymssql
 
