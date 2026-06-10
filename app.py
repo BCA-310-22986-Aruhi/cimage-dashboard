@@ -4,20 +4,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import os
-import pyodbc #DATABASE CONNECTION KELIYE
+import pymssql #DATABASE CONNECTION KELIYE
 
 #DATABASE CONNECTION (MSSQL -- AZURE SQL DATABASE)
 
 def get_connection():
-    return pyodbc.connect(
-        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-        f"SERVER={st.secrets['DB_SERVER']},1433;"
-        f"DATABASE={st.secrets['DB_NAME']};"
-        f"UID={st.secrets['DB_USER']};"
-        f"PWD={st.secrets['DB_PASS']};"
-        "Encrypt=yes;"
-        "TrustServerCertificate=no;"
-        "Connection Timeout=30;"
+    return pymssql.connect(
+        server=st.secrets['DB_SERVER'],
+        user=st.secrets['DB_USER'],
+        password=st.secrets['DB_PASS'],
+        database=st.secrets['DB_NAME']
     )
 
 
