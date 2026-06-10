@@ -61,7 +61,7 @@ def check_login(username, password):
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT full_name, role FROM users WHERE username=? AND password=?",
+            "SELECT full_name, role FROM users WHERE username=%s AND password=%s",
             (username, password)
         )
         row = cursor.fetchone()
@@ -139,10 +139,10 @@ if st.session_state.page == "login":
                 st.success(f"Welcome {user['display']}!")
                 st.rerun()
             else:
-                st.error("❌ Wrong username or password")
+                st.error(" Wrong username or password")
 
     with col2:
-        if st.button("Forgot pass?", use_container_width=True):
+        if st.button("Forgot pass%s", use_container_width=True):
             st.info("Contact: admin@cimage.in")
 
     st.stop()
@@ -506,14 +506,14 @@ if st.session_state.page == "attendance":
                     conn = get_connection()
                     cursor = conn.cursor()
                     cursor.execute(
-                        "SELECT student_id FROM students WHERE name=?",
+                        "SELECT student_id FROM students WHERE name=%s",
                         (sel_student,)
                     )
                     row = cursor.fetchone()
                     if row:
                         student_id = row[0]
                         cursor.execute(
-                            "INSERT INTO attendance (student_id, att_date, status, marked_by) VALUES (?,?,?,?)",
+                            "INSERT INTO attendance (student_id, att_date, status, marked_by) VALUES (%s,%s,%s,%s)",
                             (student_id, datetime.now().date(), status, st.session_state.username)
                         )
                         conn.commit()
@@ -549,7 +549,7 @@ if st.session_state.page == "add":
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO students (name,department,marks,attendance) VALUES (?,?,?,?)",
+                "INSERT INTO students (name,department,marks,attendance) VALUES (%s,%s,%s,%s)",
                 (name.strip(), department, int(marks), int(attendance))
             )
             conn.commit()
@@ -575,7 +575,7 @@ if st.session_state.page == "add":
                         conn = get_connection()
                         cursor = conn.cursor()
                         cursor.execute(
-                            "DELETE FROM students WHERE name=?",
+                            "DELETE FROM students WHERE name=%s",
                             (del_name,)
                         )
                         conn.commit()
@@ -664,7 +664,7 @@ if st.session_state.page == "settings":
              conn = get_connection()
              cursor = conn.cursor()
              cursor.execute(
-                 "UPDATE users SET password=? WHERE username=?",
+                 "UPDATE users SET password=%s WHERE username=%s",
                  (new_p, st.session_state.username)
              )
              conn.commit()
