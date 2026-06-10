@@ -4,6 +4,22 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import os
+import pyodbc #DATABASE CONNECTION KELIYE
+
+#DATABASE CONNECTION (MSSQL -- AZURE SQL DATABASE)
+
+def get_connection():
+    return pyodbc.connect(
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        "SERVER=cimage-server.database.windows.net,1433;"
+        "DATABASE=CimageDB;"
+        "UID=Cimageadmin;"
+        "PWD=cimage@123;"
+        "Encrypt=yes;"
+        "TrustServerCertificate=no;"
+        "Connection Timeout=30;"
+    )
+
 
 st.set_page_config(page_title="CIMAGE Dashboard", page_icon="🎓", layout="wide")
 
@@ -43,11 +59,23 @@ if "username"      not in st.session_state: st.session_state.username      = ""
 if "notifications" not in st.session_state: st.session_state.notifications = []
 
 # login page 
-USERS = {
-    "admin":   {"password": "1234", "role": "admin",   "display": "Admin"},
-    "student": {"password": "pass", "role": "student", "display": "Student"},
-}
 
+def check_login(username, password):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT full_name, role FROM users WHERE username=? AND password=?",
+            (username, password)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {"display": row[0], "role": row[1]}
+        return None
+    except Exception as e:
+        st.error(f"DB Error: {e}")
+        return None
 
 
 # LANDING PAGE
@@ -93,18 +121,17 @@ if st.session_state.page == "login":
 
     st.markdown("<h1 style='text-align:center;'>🔐 Login</h1>", unsafe_allow_html=True)
 
-    # FIX 1: show both roles clearly so tester knows credentials
-   # st.info("**Admin login:** username `admin` | password `1234`\n\n"
-     #       "**Student login:** username `student` | password `pass`")
-
+   #login
+   
+    role_select = st.selectbox("Login As", ["Admin", "Student"])
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     col1, col2 = st.columns(2)
     with col1:
         if st.button("LOGIN", use_container_width=True):
-            user = USERS.get(username)
-            if user and user["password"] == password:
+            user =check_login(username, password)
+            if user:
                 st.session_state.logged_in = True
                 st.session_state.username  = username
                 st.session_state.role      = user["role"]
@@ -175,29 +202,20 @@ if st.session_state.page not in ["landing", "login"]:
 
 # 3. LOAD DATA
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_data():
     try:
-        data = pd.read_csv("student_data_150.csv")
-    except FileNotFoundError:
-        import numpy as np
-        np.random.seed(42)
-        n = 150
-        names = ["Rahul","Ankit","Priya","Sneha","Ravi","Amit",
-                 "Pooja","Raj","Neha","Vikram","Sita","Geeta"]
-        depts = ["BCA","BBA","BCom","BScIT"]
-        data = pd.DataFrame({
-            "name":       [names[i % len(names)] + str(i) for i in range(n)],
-            "department": [depts[i % len(depts)]          for i in range(n)],
-            "marks":      np.random.randint(20, 100, n),
-        })
+        conn = get_connection()
+        data = pd.read_sql("SELECT * FROM students", conn)
+        conn.close()
+    except Exception as e:
+        st.error(f"DB Error: {e}")
+        data = pd.DataFrame(columns=["name","department","marks","attendance"])
     data.columns = data.columns.str.strip().str.lower()
     return data
 
 df = load_data()
 
-att_cycle = [88, 75, 92, 81, 67, 95, 70, 83, 60, 98]
-df["attendance"] = [att_cycle[i % len(att_cycle)] for i in range(len(df))]
 df["rank"]   = df["marks"].rank(ascending=False, method="dense").astype(int)
 df["result"] = df["marks"].apply(lambda x: "Pass" if x >= 40 else "Fail")
 df["grade"]  = df["marks"].apply(
@@ -272,7 +290,7 @@ if st.session_state.page == "dashboard":
     if len(fdf) > 0:
         topper = fdf.sort_values("marks", ascending=False).iloc[0]
         t1, t2 = st.columns([1,2])
-        with t1: st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=160)
+        with t1: st.image("https://cdn-icons-png.flaticon.com/512/2583/2583434.png", width=160)
         with t2:
             st.markdown(f"""
             ## {topper['name']}
@@ -342,7 +360,6 @@ if st.session_state.page == "analysis":
 
 
 # 6. STUDENT PROFILE
-
 if st.session_state.page == "profile":
     st.title("Student Profile")
     name_input = st.text_input("Enter Student Name")
@@ -398,7 +415,7 @@ if st.session_state.page == "teacher":
 
 
     default_teachers = [
-        {"name": "Neeraj Poddar",   "photo": "1.Neeraj poddar.jpeg",     "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
+        {"name": "Neeraj Poddar",   "photo": "1.neeraj poddar.jpeg",    "department": "HOD",                    "subject": "English",        "experience": "10 Years", "email": "neeraj@cimage.in"},
         {"name": "Nitish Kumar",    "photo": "2.Nitish kr sir.jpeg",      "department": "HOD",                    "subject": "English",        "experience": "8 Years",  "email": "nitish@cimage.in"},
         {"name": "Amit Shukla",     "photo": "3.Amit shukla sir.jpeg",    "department": "HOD",                    "subject": "DBMS",           "experience": "9 Years",  "email": "amit@cimage.in"},
         {"name": "Raju Sir",        "photo": "4.Raju sir.jpeg",           "department": "Information Technology", "subject": "JAVA",           "experience": "9 Years",  "email": "raju@cimage.in"},
@@ -457,7 +474,6 @@ if st.session_state.page == "teacher":
 
 # 8. ATTENDANCE (sab 85prct)
 
-
 if st.session_state.page == "attendance":
     st.title("Attendance Management")
     att_df = df[["name","department","attendance"]].copy()
@@ -490,9 +506,29 @@ if st.session_state.page == "attendance":
             sel_student = st.selectbox("Student", df["name"].unique())
             status = st.radio("Status", ["Present","Absent"], horizontal=True)
             if st.button("Save"):
-                st.session_state.notifications.append(f"{sel_student} marked {status}")
-                st.success(f"Saved: {sel_student} — {status}")
-
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT student_id FROM students WHERE name=?",
+                        (sel_student,)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        student_id = row[0]
+                        cursor.execute(
+                            "INSERT INTO attendance (student_id, att_date, status, marked_by) VALUES (?,?,?,?)",
+                            (student_id, datetime.now().date(), status, st.session_state.username)
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.session_state.notifications.append(f"{sel_student} marked {status}")
+                        st.success(f"✅ Saved in DB: {sel_student} — {status}")
+                    else:
+                        st.error("Student not found!")
+                except Exception as e:
+                    st.error(f"DB Error: {e}")
+             
 
 
 # 9.ADD STUDENT
@@ -510,22 +546,51 @@ if st.session_state.page == "add":
         marks      = st.number_input("Marks *", min_value=0, max_value=100, step=1)
         attendance = st.number_input("Attendance % *", min_value=0, max_value=100, step=1, value=80)
         done       = st.form_submit_button("Add Student")
-
+     
     if done:
-        if name.strip():
-            new_row = pd.DataFrame([[name.strip(), department, marks, attendance]],
-                                   columns=["name","department","marks","attendance"])
-            updated = pd.concat([df, new_row], ignore_index=True)
-            updated.to_csv("student_data_150.csv", index=False)
+     if name.strip():
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO students (name,department,marks,attendance) VALUES (?,?,?,?)",
+                (name.strip(), department, int(marks), int(attendance))
+            )
+            conn.commit()
+            conn.close()
             load_data.clear()
             st.session_state.notifications.append(f"Student '{name}' added")
             st.success(f"{name} added successfully!")
             st.balloons()
-        else:
-            st.error("Please enter student name.")
+        except Exception as e:
+            st.error(f"DB Error: {e}")
+    else:
+        st.error("Please enter student name.")    
+        
+                
+    # DELETE STUDENT
+    
+        st.divider()
+        st.subheader(" Delete Student")
+        del_name = st.selectbox("Select Student to Delete", df["name"].tolist())
 
-
-
+        if st.button("Delete Student", type="primary"):
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "DELETE FROM students WHERE name=?",
+                            (del_name,)
+                        )
+                        conn.commit()
+                        conn.close()
+                        load_data.clear()
+                        st.session_state.notifications.append(f"Student '{del_name}' deleted")
+                        st.success(f"✅ {del_name} deleted successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"DB Error: {e}")
+    
 # 10. REPORTS
 
 if st.session_state.page == "reports":
@@ -598,15 +663,23 @@ if st.session_state.page == "settings":
         save   = st.form_submit_button("Update")
 
     if save:
-        user = USERS.get(st.session_state.username)
-        if user and user["password"] == old_p:
-            if new_p == conf_p and len(new_p) >= 4:
-                USERS[st.session_state.username]["password"] = new_p
-                st.success("Password updated!")
-            else:
-                st.error("Passwords don't match or too short.")
-        else:
-            st.error("Current password is wrong.")
+        if new_p == conf_p and len(new_p) >= 4:
+           try:
+             conn = get_connection()
+             cursor = conn.cursor()
+             cursor.execute(
+                 "UPDATE users SET password=? WHERE username=?",
+                 (new_p, st.session_state.username)
+             )
+             conn.commit()
+             conn.close()
+             st.success("Password updated!")
+           except Exception as e:
+            st.error(f"DB Error: {e}")
+    else:
+        st.error("Passwords don't match or too short.")
+                
+               
 
     st.subheader("Data")
     if st.button("Reload Data"):
