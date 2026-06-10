@@ -10,11 +10,11 @@ import pyodbc #DATABASE CONNECTION KELIYE
 
 def get_connection():
     return pyodbc.connect(
-        "DRIVER={ODBC Driver 18 for SQL Server};"
-        "SERVER=cimage-server.database.windows.net,1433;"
-        "DATABASE=CimageDB;"
-        "UID=Cimageadmin;"
-        "PWD=cimage@123;"
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER={st.secrets['DB_SERVER']},1433;"
+        f"DATABASE={st.secrets['DB_NAME']};"
+        f"UID={st.secrets['DB_USER']};"
+        f"PWD={st.secrets['DB_PASS']};"
         "Encrypt=yes;"
         "TrustServerCertificate=no;"
         "Connection Timeout=30;"
