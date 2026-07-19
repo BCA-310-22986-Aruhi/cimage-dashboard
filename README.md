@@ -33,6 +33,6 @@ Project Modules
 - Notifications and Settings
 - Data Analysis and Visualization
 
-Developed For
+Developed For-
 
-Final Year BCA Major Project – CIMAGE, Patna.
+Final Year BCA  Project – CIMAGE, Patna.
